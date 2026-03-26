@@ -1,7 +1,8 @@
 # Data Battle 2026 - Meteorage
 ## Prediction probabiliste de la fin d'un orage
 
-> **Application de demonstration** : [Lancer l'app Streamlit](#lancer-lapplication) | [Guide d'utilisation](#utilisation-de-lapplication)
+> **Application de demonstration** : [demo en ligne](https://databattle-ai-2026.streamlit.app)
+|  [Lancer l'app Streamlit](#lancer-lapplication) | [Guide d'utilisation](#utilisation-de-lapplication) 
 
 Modele de machine learning qui predit en temps reel la fin d'une alerte orageuse autour d'un aeroport. Il estime, pour chaque eclair nuage-sol (CG), la probabilite qu'il soit le dernier de l'alerte, permettant de lever l'alerte plus tot que la regle fixe de 30 minutes tout en maintenant un risque inferieur a 2%.
 
