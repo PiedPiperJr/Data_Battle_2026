@@ -172,7 +172,10 @@ if page == "Prediction en temps reel":
     eval_path = os.path.join(BASE, "segment_alerts_all_airports_eval.csv")
     train_path = os.path.join(BASE, "segment_alerts_all_airports_train",
                                "segment_alerts_all_airports_train.csv")
+    test_path = os.path.join(BASE, "dataset_test", "dataset_set.csv")
     datasets = {}
+    if os.path.exists(test_path):
+        datasets["Test set (dataset_test)"] = test_path
     if os.path.exists(eval_path):
         datasets["Evaluation (2023-2025)"] = eval_path
     if os.path.exists(train_path):
@@ -525,15 +528,23 @@ elif page == "Tester / Predire":
                        "uploadez un CSV complet avec la sequence d'eclairs.")
 
     else:  # Demo rapide
-        st.subheader("Demo rapide sur le dataset d'evaluation")
-        st.markdown("Selectionner un aeroport pour lancer la prediction sur une alerte aleatoire du dataset d'evaluation.")
+        st.subheader("Demo rapide")
+        st.markdown("Choisir un dataset et un aeroport, puis cliquer sur **Alerte aleatoire**.")
 
-        eval_path = os.path.join(BASE, "segment_alerts_all_airports_eval.csv")
-        if not os.path.exists(eval_path):
-            st.error("Dataset d'evaluation non trouve.")
+        demo_datasets = {}
+        test_p = os.path.join(BASE, "dataset_test", "dataset_set.csv")
+        eval_p = os.path.join(BASE, "segment_alerts_all_airports_eval.csv")
+        if os.path.exists(test_p):
+            demo_datasets["Test set (dataset_test)"] = test_p
+        if os.path.exists(eval_p):
+            demo_datasets["Evaluation (2023-2025)"] = eval_p
+
+        if not demo_datasets:
+            st.error("Aucun dataset trouve.")
             st.stop()
 
-        df_eval = load_dataset(eval_path)
+        demo_ds = st.selectbox("Dataset", list(demo_datasets.keys()), key="demo_ds")
+        df_eval = load_dataset(demo_datasets[demo_ds])
         labeled_eval = df_eval[df_eval["airport_alert_id"].notnull()]
 
         demo_ap = st.selectbox("Aeroport", sorted(labeled_eval["airport"].unique()), key="demo_ap")
