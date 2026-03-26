@@ -1,0 +1,26 @@
+{
+  "Per-airport": {
+    "theta": 0.6,
+    "gain_h": 573.8,
+    "risk_pct": 1.88,
+    "gain_per_alert": 31.8
+  },
+  "LightGBM global": {
+    "theta": 0.9,
+    "gain_h": 278.5,
+    "risk_pct": 1.9,
+    "gain_per_alert": 15.5
+  },
+  "XGBoost global": {
+    "theta": 0.85,
+    "gain_h": 548.3,
+    "risk_pct": 1.76,
+    "gain_per_alert": 30.4
+  },
+  "Ensemble": {
+    "theta": 0.8,
+    "gain_h": 404.0,
+    "risk_pct": 1.79,
+    "gain_per_alert": 22.4
+  }
+}

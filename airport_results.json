@@ -1,0 +1,47 @@
+{
+  "Ajaccio": {
+    "auc": 0.9329,
+    "f1": 0.4554,
+    "precision": 0.3698,
+    "recall": 0.5925,
+    "best_thr": 0.248,
+    "n": 10647,
+    "n_pos": 530
+  },
+  "Bastia": {
+    "auc": 0.9226,
+    "f1": 0.3952,
+    "precision": 0.3276,
+    "recall": 0.4981,
+    "best_thr": 0.282,
+    "n": 13742,
+    "n_pos": 532
+  },
+  "Biarritz": {
+    "auc": 0.9235,
+    "f1": 0.4665,
+    "precision": 0.3426,
+    "recall": 0.7305,
+    "best_thr": 0.132,
+    "n": 9911,
+    "n_pos": 590
+  },
+  "Nantes": {
+    "auc": 0.9047,
+    "f1": 0.4261,
+    "precision": 0.3343,
+    "recall": 0.5874,
+    "best_thr": 0.079,
+    "n": 4378,
+    "n_pos": 206
+  },
+  "Pise": {
+    "auc": 0.9307,
+    "f1": 0.4409,
+    "precision": 0.4077,
+    "recall": 0.4798,
+    "best_thr": 0.422,
+    "n": 17921,
+    "n_pos": 769
+  }
+}

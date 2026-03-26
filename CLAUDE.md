@@ -39,23 +39,27 @@ n'hésite pas à modifier CLAUDE.md pour mettre à jour les instructions si nece
 
 ---
 
-## État d'avancement (26 mars 2026)
+## Etat d'avancement (26 mars 2026)
 
-### Travail effectué :
-1. **EDA complète** → notebook `01_EDA_exploration.ipynb` + 9 figures dans `plots/`
-2. **Feature engineering causal** (36 features sans fuite de données)
-3. **Modèle LightGBM** → `models/lgbm_v2.pkl` 
-4. **Cross-validation GroupKFold(5)** par alerte → AUC=0.9197 ± 0.0040
-5. **Prédictions générées** → `predictions_train.csv`, `predictions_eval.csv`
-6. **Évaluation protocole officiel** → θ=0.95 : Gain=80.4h, Risque=0.95%
+### Travail effectue :
+1. **EDA complete** : notebook `01_EDA_exploration.ipynb` + 20 figures dans `plots/`
+2. **Feature engineering causal** (62 features sans fuite de donnees)
+3. **Comparaison multi-modeles** : 10 configurations testees (LightGBM, XGBoost, RF, LogReg, Ensemble, Stacking)
+4. **Cross-validation GroupKFold(5)** par alerte
+5. **3 modeles finaux** : `lgbm_per_airport.pkl`, `lgbm_v3.pkl`, `xgb_tuned.pkl`
+6. **Predictions eval** : `predictions.csv` (format officiel)
+7. **Application Streamlit** : `app.py` (3 pages)
+8. **Notebook complet** : `02_model_prediction.ipynb` (47 cellules, 18 images)
+9. **README competition-ready** : jury comprend et teste en 2 minutes
 
-### Résultats clés :
-- AUC OOF = **0.9197** (baseline météorage : 80.77% accuracy)
-- Meilleur theta (R < 2%) = **0.95** → Gain=**80.4h** sur eval, Risque=**0.95%**
-- Top features : azimuth, dt_prev_s, maxis, dist_trend_3, amp_abs
+### Resultats cles :
+- Meilleur F1 (OOF) = **0.4489** (Ensemble)
+- Meilleur AUC-ROC = **0.9365** (XGBoost tuned)
+- Meilleur gain operationnel (R<2%) = **548.3h** (XGBoost, theta=0.85, R=1.76%)
+- Per-airport : **573.8h** gain (theta=0.60, R=1.88%)
+- Top features : azimuth, maxis, dist, dist_mean_3, amplitude
 
-### Prochaines étapes :
-- Intégrer les éclairs IC comme contexte temporel
-- Modèles par aéroport
-- Améliorer les features de densité
-- Formulaires de jalons à remplir
+### Prochaines etapes :
+- Formulaires de jalons a remplir
+- Support de presentation PDF
+- Lien de demonstration (video ou app deployee)
