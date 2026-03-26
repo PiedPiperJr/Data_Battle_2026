@@ -5,12 +5,16 @@
 
 ---
 
-## Equipe
+## Equipe — Pied Piper Jr.
 
-| Nom | Role |
-|-----|------|
-| *Nom Prenom 1* | Data Scientist |
-| *Nom Prenom 2* | Data Scientist |
+| Nom |
+|-----|
+| HASSANA Mohamadou |
+| KENGALI Pacome |
+| KOMGUEM Helcias |
+| MAFFO Natacha |
+| MBASSI Loic |
+| MOGOU Igor |
 
 ---
 

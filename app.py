@@ -143,6 +143,7 @@ with st.sidebar:
 
     page = st.radio("Navigation", [
         "Prediction en temps reel",
+        "Tester / Predire",
         "Analyse exploratoire",
         "Guide d'utilisation",
     ])
@@ -154,9 +155,9 @@ with st.sidebar:
 
     st.divider()
     st.markdown("**Performances (eval 2023-2025)**")
-    st.markdown(f"- Gain : **213.8 h** sur 612 alertes")
-    st.markdown(f"- Risque : **1.15%** (< 2%)")
-    st.markdown(f"- ~21 min recuperees par alerte")
+    st.markdown(f"- Gain : **548.3 h** sur 1081 alertes")
+    st.markdown(f"- Risque : **1.76%** (< 2%)")
+    st.markdown(f"- ~30 min recuperees par alerte")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -324,7 +325,310 @@ if page == "Prediction en temps reel":
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PAGE 2 : ANALYSE EXPLORATOIRE
+# PAGE 2 : TESTER / PREDIRE
+# ══════════════════════════════════════════════════════════════════════════════
+elif page == "Tester / Predire":
+
+    st.header("Tester une prediction")
+    st.markdown("Uploadez votre propre fichier CSV ou saisissez les parametres manuellement.")
+
+    mode = st.radio("Mode", ["Upload CSV", "Saisie manuelle (un eclair)", "Demo rapide (dataset eval)"],
+                    horizontal=True)
+
+    if mode == "Upload CSV":
+        st.subheader("Charger un fichier CSV")
+        st.info(
+            "Le fichier doit contenir les colonnes : **date**, **airport**, **airport_alert_id**, "
+            "**dist**, **azimuth**, **amplitude**, **maxis**, **icloud**. "
+            "Les eclairs CG doivent avoir icloud=False."
+        )
+        uploaded = st.file_uploader("Fichier CSV", type=["csv"])
+        if uploaded is not None:
+            try:
+                df_up = pd.read_csv(uploaded)
+                df_up["date"] = pd.to_datetime(df_up["date"], utc=True)
+                df_up["icloud"] = df_up["icloud"].map(
+                    {"True": True, "False": False, True: True, False: False}
+                ).fillna(df_up["icloud"]).astype(bool)
+
+                st.success(f"Fichier charge : {len(df_up)} lignes, {df_up['airport'].nunique()} aeroport(s), "
+                           f"{df_up['airport_alert_id'].nunique()} alerte(s)")
+
+                # Selection aeroport / alerte
+                col1, col2 = st.columns(2)
+                with col1:
+                    ap_up = st.selectbox("Aeroport", sorted(df_up["airport"].unique()), key="up_ap")
+                with col2:
+                    alerts_up = sorted(df_up[(df_up["airport"] == ap_up) & (~df_up["icloud"])]["airport_alert_id"].unique())
+                    al_up = st.selectbox("Alerte", alerts_up, key="up_al")
+
+                df_alert_up = df_up[(df_up["airport"] == ap_up) & (df_up["airport_alert_id"] == al_up)]
+                df_cg_up = df_alert_up[~df_alert_up["icloud"]].copy()
+
+                if len(df_cg_up) == 0:
+                    st.warning("Aucun eclair CG dans cette alerte.")
+                else:
+                    with st.spinner("Calcul des features et prediction..."):
+                        df_feat_up = make_features(df_cg_up.copy(), df_up)
+                        scores_up = predict(df_feat_up, models, ap_up)
+                        df_feat_up["confidence"] = scores_up
+
+                    sub_up = df_feat_up.sort_values("date").reset_index(drop=True)
+                    t0_up = sub_up["date"].min()
+                    sub_up["t_min"] = (sub_up["date"] - t0_up).dt.total_seconds() / 60
+
+                    pred_above_up = sub_up[sub_up["confidence"] >= theta]
+                    predicted_end_up = pred_above_up["date"].min() if len(pred_above_up) > 0 else None
+                    last_date_up = sub_up["date"].max()
+                    baseline_end_up = last_date_up + pd.Timedelta(minutes=30)
+                    gain_up = (baseline_end_up - predicted_end_up).total_seconds() / 60 if predicted_end_up else 0
+
+                    # KPIs
+                    k1, k2, k3, k4 = st.columns(4)
+                    k1.metric("Eclairs CG", len(sub_up))
+                    k2.metric("Score max", f"{sub_up['confidence'].max():.1%}")
+                    if predicted_end_up:
+                        k3.metric("Fin predite", predicted_end_up.strftime("%H:%M:%S UTC"))
+                        k4.metric("Gain estime", f"{gain_up:.0f} min")
+                    else:
+                        k3.metric("Fin predite", "Non atteint")
+                        k4.metric("Gain estime", "0 min")
+
+                    # Chart
+                    fig_up = go.Figure()
+                    fig_up.add_trace(go.Scatter(
+                        x=sub_up["t_min"], y=sub_up["confidence"],
+                        mode="lines+markers", name="Score",
+                        line=dict(color="#1f77b4", width=2.5), marker=dict(size=5),
+                    ))
+                    fig_up.add_hline(y=theta, line_dash="dash", line_color="red",
+                                     annotation_text=f"theta = {theta:.2f}")
+                    if predicted_end_up:
+                        pred_t_up = (predicted_end_up - t0_up).total_seconds() / 60
+                        fig_up.add_vline(x=pred_t_up, line_color="green", line_dash="dot",
+                                         annotation_text="Fin predite")
+                    fig_up.update_layout(
+                        title="Score de confiance par eclair CG",
+                        xaxis_title="Temps depuis debut alerte (min)",
+                        yaxis_title="Score", yaxis_range=[0, 1.05],
+                        height=400, plot_bgcolor="white",
+                    )
+                    st.plotly_chart(fig_up, use_container_width=True)
+
+                    # Detailed table
+                    with st.expander("Tableau detaille"):
+                        disp_up = sub_up[["date", "dist", "amplitude", "maxis", "azimuth", "confidence"]].copy()
+                        disp_up["score %"] = (disp_up["confidence"] * 100).round(1)
+                        disp_up["fin predite ?"] = disp_up["confidence"] >= theta
+                        disp_up["date"] = disp_up["date"].dt.strftime("%H:%M:%S")
+                        disp_up = disp_up.drop(columns=["confidence"])
+                        st.dataframe(disp_up, use_container_width=True, height=300)
+
+            except Exception as e:
+                st.error(f"Erreur lors du chargement : {e}")
+
+    elif mode == "Saisie manuelle (un eclair)":
+        st.subheader("Simuler un eclair unique")
+        st.markdown("Entrez les parametres d'un eclair fictif pour voir le score du modele.")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            man_airport = st.selectbox("Aeroport", ["Ajaccio", "Bastia", "Biarritz", "Nantes", "Pise"], key="man_ap")
+            man_dist = st.number_input("Distance (km)", 0.0, 50.0, 8.0, 0.5)
+            man_azimuth = st.number_input("Azimuth (degres)", 0.0, 360.0, 180.0, 5.0)
+        with col2:
+            man_amplitude = st.number_input("Amplitude (kA)", -200.0, 200.0, -15.0, 1.0)
+            man_maxis = st.number_input("Maxis (kA)", 0.0, 300.0, 20.0, 1.0)
+            man_month = st.selectbox("Mois", list(range(1, 13)), index=6)
+        with col3:
+            man_hour = st.selectbox("Heure UTC", list(range(0, 24)), index=15)
+            man_rank = st.number_input("Rang CG dans l'alerte", 1, 500, 10)
+            man_dt_prev = st.number_input("Temps depuis eclair precedent (s)", 0.0, 3600.0, 60.0, 10.0)
+
+        if st.button("Predire", type="primary"):
+            # Build a minimal feature vector
+            feat_dict = {
+                "rank_cg": man_rank,
+                "t_since_start_s": man_rank * man_dt_prev,
+                "dt_prev_s": man_dt_prev,
+                "amp_abs": abs(man_amplitude),
+                "amp_sign": np.sign(man_amplitude),
+                "dist": man_dist,
+                "azimuth": man_azimuth,
+                "amplitude": man_amplitude,
+                "maxis": man_maxis,
+                "month": man_month,
+                "hour": man_hour,
+            }
+            # Fill rolling window features with approximate values
+            for w in [3, 5, 10, 20]:
+                feat_dict[f"dt_mean_{w}"] = man_dt_prev
+                feat_dict[f"dt_max_{w}"] = man_dt_prev * 1.5
+                feat_dict[f"dt_std_{w}"] = man_dt_prev * 0.3
+                feat_dict[f"dt_ema_{w}"] = man_dt_prev
+                feat_dict[f"dist_mean_{w}"] = man_dist
+                feat_dict[f"dist_trend_{w}"] = 0.0
+                feat_dict[f"amp_mean_{w}"] = abs(man_amplitude)
+                feat_dict[f"amp_trend_{w}"] = 0.0
+            for wm in [2, 5, 10, 15, 30]:
+                feat_dict[f"n_cg_{wm}min"] = max(1, int(wm * 60 / max(man_dt_prev, 1)))
+            feat_dict["rate_decline_cg"] = feat_dict["n_cg_5min"] / (feat_dict["n_cg_10min"] + 1)
+            for c in ["n_ic_2min", "n_ic_5min", "n_ic_10min", "n_ic_30min",
+                       "n_all_2min", "n_all_5min", "n_all_10min"]:
+                feat_dict[c] = 0
+            feat_dict["ratio_ic_cg_5min"] = 0.0
+            feat_dict["ratio_ic_cg_10min"] = 0.0
+            feat_dict["ic_trend"] = 0.0
+            feat_dict["total_activity"] = feat_dict["n_all_5min"]
+            feat_dict["activity_decline"] = 0.5
+
+            df_man = pd.DataFrame([feat_dict])
+            score_man = predict(df_man, models, man_airport)
+            score_val = score_man[0]
+
+            st.divider()
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Score de confiance", f"{score_val:.1%}")
+            m2.metric("Seuil theta", f"{theta:.0%}")
+            if score_val >= theta:
+                m3.metric("Decision", "LEVER L'ALERTE", delta="Score >= theta")
+                st.success(f"Le modele predit que cet eclair est probablement le dernier (score={score_val:.3f} >= theta={theta:.2f}).")
+            else:
+                m3.metric("Decision", "MAINTENIR L'ALERTE", delta="Score < theta", delta_color="inverse")
+                st.warning(f"L'orage est probablement encore actif (score={score_val:.3f} < theta={theta:.2f}).")
+
+            # Score gauge
+            fig_gauge = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=score_val * 100,
+                number={"suffix": "%"},
+                title={"text": "Score de confiance"},
+                gauge={
+                    "axis": {"range": [0, 100]},
+                    "bar": {"color": "#1f77b4"},
+                    "steps": [
+                        {"range": [0, theta * 100], "color": "#ffebee"},
+                        {"range": [theta * 100, 100], "color": "#e8f5e9"},
+                    ],
+                    "threshold": {
+                        "line": {"color": "red", "width": 4},
+                        "thickness": 0.75,
+                        "value": theta * 100,
+                    },
+                },
+            ))
+            fig_gauge.update_layout(height=300)
+            st.plotly_chart(fig_gauge, use_container_width=True)
+
+            st.caption("Note : la saisie manuelle est une approximation. Les features de fenetre glissante "
+                       "sont estimees a partir d'un seul eclair. Pour des resultats precis, "
+                       "uploadez un CSV complet avec la sequence d'eclairs.")
+
+    else:  # Demo rapide
+        st.subheader("Demo rapide sur le dataset d'evaluation")
+        st.markdown("Selectionner un aeroport pour lancer la prediction sur une alerte aleatoire du dataset d'evaluation.")
+
+        eval_path = os.path.join(BASE, "segment_alerts_all_airports_eval.csv")
+        if not os.path.exists(eval_path):
+            st.error("Dataset d'evaluation non trouve.")
+            st.stop()
+
+        df_eval = load_dataset(eval_path)
+        labeled_eval = df_eval[df_eval["airport_alert_id"].notnull()]
+
+        demo_ap = st.selectbox("Aeroport", sorted(labeled_eval["airport"].unique()), key="demo_ap")
+        demo_alerts = sorted(labeled_eval[labeled_eval["airport"] == demo_ap]["airport_alert_id"].unique())
+
+        if st.button("Alerte aleatoire", type="primary"):
+            st.session_state["demo_alert"] = int(np.random.choice(demo_alerts))
+
+        demo_alert = st.session_state.get("demo_alert", demo_alerts[0] if demo_alerts else None)
+        if demo_alert is not None:
+            st.info(f"Alerte **#{int(demo_alert)}** a **{demo_ap}**")
+
+            df_demo_full = labeled_eval[(labeled_eval["airport"] == demo_ap) &
+                                         (labeled_eval["airport_alert_id"] == demo_alert)]
+            df_demo_cg = df_demo_full[~df_demo_full["icloud"]].copy()
+
+            if len(df_demo_cg) == 0:
+                st.warning("Aucun eclair CG.")
+            else:
+                with st.spinner("Prediction en cours..."):
+                    df_demo_feat = make_features(df_demo_cg.copy(), df_eval)
+                    scores_demo = predict(df_demo_feat, models, demo_ap)
+                    df_demo_feat["confidence"] = scores_demo
+
+                sub_demo = df_demo_feat.sort_values("date").reset_index(drop=True)
+                t0_d = sub_demo["date"].min()
+                sub_demo["t_min"] = (sub_demo["date"] - t0_d).dt.total_seconds() / 60
+
+                last_date_d = sub_demo["date"].max()
+                baseline_end_d = last_date_d + pd.Timedelta(minutes=30)
+                pa_d = sub_demo[sub_demo["confidence"] >= theta]
+                pe_d = pa_d["date"].min() if len(pa_d) > 0 else None
+                gain_d = (baseline_end_d - pe_d).total_seconds() / 60 if pe_d else 0
+
+                # KPIs
+                dk1, dk2, dk3, dk4 = st.columns(4)
+                dk1.metric("Eclairs CG", len(sub_demo))
+                dk2.metric("Duree", f"{(last_date_d - t0_d).total_seconds()/60:.0f} min")
+                dk3.metric("Score max", f"{sub_demo['confidence'].max():.1%}")
+                dk4.metric("Gain estime", f"{gain_d:.0f} min" if pe_d else "0 min")
+
+                # 3-panel chart
+                fig_demo = make_subplots(
+                    rows=3, cols=1, shared_xaxes=True,
+                    row_heights=[0.45, 0.30, 0.25],
+                    subplot_titles=["Score de confiance", "Distance (km)", "Activite CG (5 min)"],
+                    vertical_spacing=0.08,
+                )
+                fig_demo.add_trace(go.Scatter(
+                    x=sub_demo["t_min"], y=sub_demo["confidence"],
+                    mode="lines+markers", name="Score",
+                    line=dict(color="#1f77b4", width=2.5), marker=dict(size=5),
+                ), row=1, col=1)
+                fig_demo.add_hline(y=theta, line_dash="dash", line_color="red",
+                                   annotation_text=f"theta={theta:.2f}", row=1, col=1)
+                if pe_d:
+                    fig_demo.add_vline(x=(pe_d - t0_d).total_seconds()/60,
+                                       line_color="green", line_dash="dot",
+                                       annotation_text="Fin predite", row=1, col=1)
+                if "is_last_lightning_cloud_ground" in sub_demo.columns:
+                    lt_d = sub_demo[sub_demo["is_last_lightning_cloud_ground"].astype(str) == "True"]
+                    if len(lt_d) > 0:
+                        fig_demo.add_vline(x=(lt_d.iloc[0]["date"] - t0_d).total_seconds()/60,
+                                           line_color="orange", line_dash="dashdot",
+                                           annotation_text="Vrai dernier", row=1, col=1)
+
+                fig_demo.add_trace(go.Scatter(
+                    x=sub_demo["t_min"], y=sub_demo["dist"],
+                    mode="lines", name="Distance",
+                    line=dict(color="#ff7f0e", width=2), fill="tozeroy",
+                    fillcolor="rgba(255,127,14,0.1)",
+                ), row=2, col=1)
+                fig_demo.add_hline(y=3, line_dash="dot", line_color="red",
+                                   annotation_text="3 km", row=2, col=1)
+
+                fig_demo.add_trace(go.Bar(
+                    x=sub_demo["t_min"], y=sub_demo["n_cg_5min"],
+                    name="CG/5min", marker_color="#9467bd", opacity=0.7,
+                ), row=3, col=1)
+
+                fig_demo.update_xaxes(title_text="Temps (min)", row=3, col=1)
+                fig_demo.update_yaxes(range=[0, 1.05], row=1, col=1)
+                fig_demo.update_layout(height=650, showlegend=False,
+                                       plot_bgcolor="white", paper_bgcolor="white",
+                                       margin=dict(t=40, b=20, l=60, r=20))
+                st.plotly_chart(fig_demo, use_container_width=True)
+
+                if pe_d:
+                    st.success(f"Fin predite a **{pe_d.strftime('%H:%M:%S UTC')}** — Gain : **{gain_d:.0f} min**")
+                else:
+                    st.warning("Seuil non atteint. Essayez de baisser theta.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE 3 : ANALYSE EXPLORATOIRE
 # ══════════════════════════════════════════════════════════════════════════════
 elif page == "Analyse exploratoire":
 
@@ -347,6 +651,12 @@ elif page == "Analyse exploratoire":
         ("11_eval_gain_risk.png",          "Courbe Gain-Risque vs theta"),
         ("12_model_v3_results.png",        "Resultats detailles V3"),
         ("13_comparison_final.png",        "Comparaison finale des approches"),
+        ("14_model_comparison.png",        "Comparaison multi-modeles (F1, AUC, PR)"),
+        ("15_precision_recall_curves.png", "Courbes Precision-Recall"),
+        ("16_roc_curves.png",              "Courbes ROC"),
+        ("17_feature_importance_final.png","Importance des features (finale)"),
+        ("18_operational_evaluation.png",  "Evaluation operationnelle (Gain/Risque vs theta)"),
+        ("19_gain_vs_risk.png",            "Compromis Gain vs Risque"),
     ]
 
     for fname, title in figures:
@@ -451,28 +761,31 @@ Theta est le seuil de decision. Le premier eclair dont le score depasse theta de
 Donnees brutes (CSV Meteorage)
     |
     v
-Feature Engineering (67 features causales)
+Feature Engineering (62 features causales)
     |  - Temps inter-eclairs (dt_prev_s, moyennes glissantes, EMA)
     |  - Distance et tendance spatiale (dist_trend_W)
     |  - Amplitude et intensite (amp_abs, maxis)
     |  - Densite CG temporelle (n_cg_2/5/10/15/30min)
     |  - Contexte IC (n_ic, ratio_ic_cg, ic_trend)
     v
-LightGBM (un modele par aeroport)
-    |  class_weight='balanced', GroupKFold(5) par alerte
+Multi-modeles (GroupKFold 5 par alerte)
+    |  - XGBoost tuned (1500 trees) → AUC 0.937
+    |  - LightGBM tuned (2000 trees) → F1 0.440
+    |  - LightGBM per-airport → Gain 573.8h
+    |  - Ensemble (moyenne des 3)  → F1 0.449
     v
 Score de confiance [0, 1]
     |
     v
-Seuil theta -> Decision de levee d'alerte
+Seuil theta (0.85 recommande) → Decision de levee d'alerte
         """, language="text")
 
         st.subheader("Resultats de validation")
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("AUC", "0.9328")
-        c2.metric("F1", "0.446")
-        c3.metric("Gain (eval)", "213.8 h")
-        c4.metric("Risque", "1.15%")
+        c1.metric("AUC", "0.9365")
+        c2.metric("F1", "0.449")
+        c3.metric("Gain (eval)", "548.3 h")
+        c4.metric("Risque", "1.76%")
 
         st.subheader("Top 10 features")
         fi = pd.DataFrame({
